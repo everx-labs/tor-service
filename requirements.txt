@@ -1,0 +1,5 @@
+aiohttp == 3.7.3
+asyncio == 3.4.3 
+qrcode == 6.1 
+python-dotenv >=0.15
+ton-client-py >=1.4,<2.0 

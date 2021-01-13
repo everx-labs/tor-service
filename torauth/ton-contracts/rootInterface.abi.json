@@ -1,0 +1,36 @@
+{
+    "ABI version": 2,
+    "header": [
+        "pubkey",
+        "time",
+        "expire"
+    ],
+    "functions": [
+        {
+            "name": "constructor",
+            "inputs": [],
+            "outputs": [],
+            "id": "0xa"
+        },
+        {
+            "name": "sign",
+            "inputs": [
+                {
+                    "name": "signed_random",
+                    "type": "bytes"
+                },
+                {
+                    "name": "signature",
+                    "type": "bytes"
+                },
+                {
+                    "name": "public_key",
+                    "type": "bytes"
+                }
+            ],
+            "outputs": [],
+            "id": "0xb"
+        }
+    ],
+    "events": []
+}

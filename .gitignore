@@ -1,0 +1,10 @@
+.cert
+.*.swp
+logs
+*.log
+npm-debug.log*
+node_modules/
+package-lock.json
+.npm
+.eslintcache
+__pycache__
