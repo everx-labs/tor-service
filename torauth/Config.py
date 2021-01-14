@@ -1,4 +1,5 @@
 import os
+import re
 import base64
 import logging
 from dotenv import load_dotenv
@@ -8,11 +9,15 @@ from tonclient.types import Abi, KeyPair, ClientConfig
 log = logging.getLogger(__name__)
 
 
+def onlydigits(string):
+    return re.sub('[^0-9]', '', string)
+
+
 def get_var(name):
     # All variables MUST be set
     value = os.getenv(name)
     log.debug('{} = {}'.format(name, value))
-    if value == None:
+    if value is None:
         raise TypeError('Variable not set {}'.format(name))
     return value
 
@@ -69,8 +74,10 @@ class Config:
 
         self.root_public = get_var('ROOT_PUBLIC')
         self.root_secret = get_var('ROOT_SECRET')
-        self.root_initial_value = get_var('ROOT_INITIAL_VALUE')
+        self.root_initial_value = onlydigits(get_var('ROOT_INITIAL_VALUE'))
 
-        self.multisig_initial_value = get_var('MULTISIG_INITIAL_VALUE')
+        self.multisig_initial_value = onlydigits(
+            get_var('MULTISIG_INITIAL_VALUE')
+        )
 
         self.deep_link_url = get_var('DEEP_LINK_URL')

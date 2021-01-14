@@ -4,7 +4,7 @@ import logging
 from unittest import IsolatedAsyncioTestCase
 
 from . mocks.Surf import Surf
-from torauth import Authenticator, Config
+from torauth import Authenticator, Config, deploy_wallet
 
 logging.basicConfig(level=os.environ.get('LOGLEVEL', 'INFO'))
 
@@ -13,27 +13,17 @@ auth = Authenticator(config)
 
 
 class UserAuthFail(IsolatedAsyncioTestCase):
-    ''' 
-    This test:
-    - creates a SURF user
-    - Asks backend to generate QR code containing some random value
-    - Signs received random value in the SURF
-    - Recives a callback with a results of authentication
-
-    In this test, we set a short retention time = 2 seconds,
-    so the user authentication will be out of date before he sends the message.
     '''
-    async def asyncSetUp(self):
-        root_address = await auth.get_root_address()
+    This test has equal to UserAuthSuccess, except 
+    that the retention time is set to be very short. 
+    '''
+    async def test_success_confirmation(self):
 
         # Create a wallet for a test user
-        self.surf = Surf(config, root_address)
-        await self.surf.deploy_wallet()
+        logging.info("Creating a new wallet for the user")
+        (wallet_address, public_key, secret_key) = await deploy_wallet(config)
+        logging.info("OK. wallet created")
 
-        # Remember user pk, we need it to generate QR code
-        self.user_public_key = await self.surf.get_public_key()
-
-    async def test_success_confirmation(self):
         auth_completed = asyncio.Future()
         test_context = {'user': 'Ron'}
 
@@ -46,17 +36,24 @@ class UserAuthFail(IsolatedAsyncioTestCase):
         # Ask backend to register callback function and generate QR code,
         # which will be shown to the user
         #
-        # param self.user_public_key: used to generate QR code
+        # param public_key: is used to generate QR code
         # param context: Serializable object, that will be used as a callback parameter
         # param retention_sec: period of time while the QR code is valid
-        base64_QR_code = await auth.start_authentication(
-            self.user_public_key, context=test_context, retention_sec=2
-        )
+        base64_qr_code = await auth.start_authentication(
+            public_key, context=test_context, retention_sec=2)
 
-        # Pretend that a user has scanned a QR-code and been redirected to the Surf
-        asyncio.create_task(self.surf.send_qr_code(base64_QR_code))
+        logging.info("Got base64 QR code: {}.....truncated".format(
+            base64_qr_code[0:25]))
+
+        # Tune Surf instance
+        surf = Surf(config, wallet_address, public_key, secret_key)
+        # and send QR code to Surf. Encoded inside QR code `random string` will be signed
+        asyncio.create_task(surf.sign(base64_qr_code))
+        logging.info(
+            "Pretend that QR code was shown and user was redirected to the Surf")
 
         result = await auth_completed
+        logging.info("Authentication result is: {}".format(result['ok']))
         self.assertEqual(result['context'], test_context)
         self.assertEqual(result['ok'], False)
 

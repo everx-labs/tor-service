@@ -5,9 +5,10 @@ import aiohttp
 import logging
 
 
-from tonclient.types import DeploySet, CallSet, Signer, ParamsOfSign, \
+from tonclient.types import DeploySet, CallSet, Signer, ParamsOfSign, KeyPair, \
     ParamsOfEncodeMessageBody, ParamsOfProcessMessage, ParamsOfEncodeMessage
 
+from torauth import Authenticator
 from torauth.utils import credit, calc_address, base64_to_hex, process_message
 
 log = logging.getLogger(__name__)
@@ -24,55 +25,13 @@ external_api = 'https://zxing.org/w/decode'
 
 class Surf:
 
-    def __init__(self, config, root_address):
-        self.root_address = root_address
+    def __init__(self, config, wallet_address, public, secret):
         self.cfg = config
-
-    async def get_public_key(self):
-        return self.keys.public
-
-    def sign_random(self, random):
-        return self.cfg.client.crypto.sign(params=ParamsOfSign(
-            unsigned=random,
-            keys=self.keys
-        ))
-
-    async def deploy_wallet(self):
-        self.keys = await self.cfg.client.crypto.generate_random_sign_keys()
-        signer = Signer.Keys(self.keys)
-
-        address = await calc_address(
-            client=self.cfg.client,
-            abi=self.cfg.multisig_abi,
-            signer=signer,
-            deploy_set=DeploySet(tvc=self.cfg.multisig_tvc)
-        )
-
-        await credit(self.cfg, address, self.cfg.multisig_initial_value)
-
-        log.debug('Deploying contract to {}'.format(address))
-
-        await process_message(
-            client=self.cfg.client,
-            params=ParamsOfProcessMessage(
-                message_encode_params=ParamsOfEncodeMessage(
-                    abi=self.cfg.multisig_abi,
-                    signer=signer,
-                    address=address,
-                    deploy_set=DeploySet(tvc=self.cfg.multisig_tvc),
-                    call_set=CallSet(
-                        function_name='constructor',
-                        input={
-                            'owners': ['0x' + self.keys.public],
-                            'reqConfirms': 1
-                        },
-                    )
-                ),
-                send_events=False
-            ))
-        self.address = address
+        self.keys = KeyPair(public, secret)
+        self.address = wallet_address
 
     async def send_message_to_blockchain(self, signed_random):
+        root_address = await Authenticator(self.cfg).get_root_address()
         log.debug('Sending message to ROOT contract')
         params = ParamsOfEncodeMessageBody(
             abi=self.cfg.root_interface_abi,
@@ -100,7 +59,7 @@ class Surf:
                     call_set=CallSet(
                         function_name='sendTransaction',
                         input={
-                            'dest': self.root_address,
+                            'dest': root_address,
                             'value': 1000000000,
                             'bounce': False,
                             'flags': 3,
@@ -112,7 +71,7 @@ class Surf:
                 send_events=False
             ))
 
-    async def send_qr_code(self, qr_code):
+    async def sign(self, qr_code):
         async with aiohttp.ClientSession() as session:
 
             # To decode QR code we use external public API
@@ -125,7 +84,13 @@ class Surf:
                     random = self._extract_random(html)
 
                     # Lets sign it and send signed_random to blockchain
-                    signed_random = await self.sign_random(random)
+                    signed_random = await self.cfg.client.crypto.sign(
+                        params=ParamsOfSign(
+                            unsigned=random,
+                            keys=self.keys
+                        )
+                    )
+
                     await self.send_message_to_blockchain(signed_random)
                     log.debug('Message sent!')
                 else:

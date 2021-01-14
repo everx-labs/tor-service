@@ -1,4 +1,3 @@
-import os
 import sys
 import asyncio
 import logging
@@ -10,6 +9,7 @@ from tonclient.types import ParamsOfGenerateRandomBytes, ParamsOfDecodeMessageBo
     KeyPair, DeploySet, Signer, ParamsOfParse, SubscriptionResponseType
 
 from torauth.Cache import Cache
+from torauth.Config import Config
 from torauth.gen_qr_code import gen_qr_code
 from torauth.utils import calc_address, hex_to_base64
 
@@ -19,7 +19,12 @@ log = logging.getLogger(__name__)
 class Authenticator:
     ''' Authenticating a site user providing his public_key as a TON blockchain user '''
 
-    def __init__(self, config):
+    def __init__(self, config: Config = None):
+        '''
+        :param config: config object, initializing from env vars
+        '''
+        if config is None:
+            config = Config()
         self.cfg = config
         self.messages = {}
         self.cache = Cache()
@@ -56,7 +61,7 @@ class Authenticator:
             await self.cfg.client.crypto.generate_random_bytes(ParamsOfGenerateRandomBytes(length=24))
         ).bytes
         log.debug('Generated random:{}'.format(rand))
-        self.cache.add(public_key, retention_sec, rand,  context)
+        self.cache.add(public_key, retention_sec, rand, context)
         return gen_qr_code(self.cfg.deep_link_url, rand)
 
     async def init(self, callback: Callable) -> None:
