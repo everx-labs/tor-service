@@ -3,8 +3,8 @@ import asyncio
 import logging
 from unittest import IsolatedAsyncioTestCase
 
-from . mocks.Surf import Surf
 from torauth import Authenticator, Config, deploy_wallet
+from . mocks.Surf import Surf
 
 logging.basicConfig(level=os.environ.get('LOGLEVEL', 'INFO'))
 
@@ -43,7 +43,10 @@ class UserAuthSuccess(IsolatedAsyncioTestCase):
         # param context: Serializable object, that will be used as a callback parameter
         # param retention_sec: period of time while the QR code is valid
         base64_qr_code = await auth.start_authentication(
-            public_key, context=test_context, retention_sec=1800)
+            wallet_address,
+            public_key,
+            context=test_context,
+            retention_sec=18000)
 
         logging.info("Got base64 QR code: {}.....truncated".format(
             base64_qr_code[0:25]))

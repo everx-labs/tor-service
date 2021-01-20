@@ -1,101 +1,82 @@
 import re
 import os
 import sys
-import aiohttp
+import json
 import logging
-
-
-from tonclient.types import DeploySet, CallSet, Signer, ParamsOfSign, KeyPair, \
-    ParamsOfEncodeMessageBody, ParamsOfProcessMessage, ParamsOfEncodeMessage
-
-from torauth import Authenticator
-from torauth.utils import credit, calc_address, base64_to_hex, process_message
-
-log = logging.getLogger(__name__)
-
+import asyncio
+from functools import wraps, partial
+import aiohttp
+from . debot import debot
 
 ##
-# This is a Surf mock.
-# This code will be completely rewritten when DeBot is ready
-##
-
+# This is a Surf mock working with real DeBot
 # To decode QR code external public API is used
 external_api = 'https://zxing.org/w/decode'
+log = logging.getLogger(__name__)
+debot_address = '0:a4543b20e0b169a7d3edb354d0aa45bc0ada23d357104ade368efde09099ec0e'
+
+tmpfiles = '../tmp/{}.keys'
+
+
+def async_wrap(func):
+    @wraps(func)
+    async def run(*args, loop=None, executor=None, **kwargs):
+        if loop is None:
+            loop = asyncio.get_event_loop()
+        pfunc = partial(func, *args, **kwargs)
+        return await loop.run_in_executor(executor, pfunc)
+    return run
+
+
+async_debot = async_wrap(debot)
 
 
 class Surf:
 
     def __init__(self, config, wallet_address, public, secret):
         self.cfg = config
-        self.keys = KeyPair(public, secret)
-        self.address = wallet_address
-
-    async def send_message_to_blockchain(self, signed_random):
-        root_address = await Authenticator(self.cfg).get_root_address()
-        log.debug('Sending message to ROOT contract')
-        params = ParamsOfEncodeMessageBody(
-            abi=self.cfg.root_interface_abi,
-            call_set=CallSet(
-                function_name='sign',
-                input={
-                    'signed_random': base64_to_hex(signed_random.signed),
-                    'signature':  base64_to_hex(signed_random.signature),
-                    'public_key': self.keys.public
-                }
-            ),
-            is_internal=True,
-            signer=Signer.NoSigner()
-        )
-
-        payload = await self.cfg.client.abi.encode_message_body(params=params)
-
-        await process_message(
-            client=self.cfg.client,
-            params=ParamsOfProcessMessage(
-                message_encode_params=ParamsOfEncodeMessage(
-                    abi=self.cfg.multisig_abi,
-                    signer=Signer.Keys(self.keys),
-                    address=self.address,
-                    call_set=CallSet(
-                        function_name='sendTransaction',
-                        input={
-                            'dest': root_address,
-                            'value': 1000000000,
-                            'bounce': False,
-                            'flags': 3,
-                            'payload': payload.body
-                        }
-
-                    )
-                ),
-                send_events=False
-            ))
+        self.public = public
+        self.secret = secret
+        self.wallet_address = wallet_address
 
     async def sign(self, qr_code):
         async with aiohttp.ClientSession() as session:
+            try:
+              # To decode QR code we use external public API
+                params = {'u': 'data:image/png;base64,{}'.format(qr_code)}
+                async with session.get(external_api, params=params) as response:
+                    log.debug('Status: {}'.format(response.status))
+                    if response.status == 200:
+                        # Surf got `random` from QR code
+                        html = await response.text()
+                        one_time_password = self._extract_random(html)
 
-            # To decode QR code we use external public API
-            params = {'u': 'data:image/png;base64,{}'.format(qr_code)}
-            async with session.get(external_api, params=params) as response:
-                log.debug('Status: {}'.format(response.status))
-                if response.status == 200:
-                    # Surf got `random` from QR code
-                    html = await response.text()
-                    random = self._extract_random(html)
-
-                    # Lets sign it and send signed_random to blockchain
-                    signed_random = await self.cfg.client.crypto.sign(
-                        params=ParamsOfSign(
-                            unsigned=random,
-                            keys=self.keys
+                        keys_filename = os.path.join(
+                            os.path.dirname(__file__),
+                            tmpfiles.format(self.wallet_address)
                         )
-                    )
+                        with open(keys_filename, 'w') as outfile:
+                            json.dump({"public": self. public,
+                                       "secret": self.secret}, outfile)
 
-                    await self.send_message_to_blockchain(signed_random)
-                    log.debug('Message sent!')
-                else:
-                    log.critical('Public QR decoder service is not available')
-                    sys.exit(1)
+                        message_is_sent = False
+                        while not message_is_sent:
+                            message_is_sent = await async_debot(
+                                debot_address,
+                                self.wallet_address,
+                                keys_filename,
+                                one_time_password
+                            )
+
+                        log.debug('Message sent!')
+                    else:
+                        raise 'Http status {}'.format(response.status)
+            except asyncio.CancelledError:
+                log.debug('OK. Surf canceled')
+            except:
+                log.error('Critical error in QR decoder service: {}'.format(
+                    sys.exc_info()[1]))
+                sys.exit(1)
 
     # Unfortunately, API sends the answer in html format only,
     # so we need to parse it

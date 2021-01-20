@@ -5,13 +5,13 @@ from typing import Callable, Any
 
 from tonclient.errors import TonException
 from tonclient.types import ParamsOfGenerateRandomBytes, ParamsOfDecodeMessageBody, \
-    ParamsOfParse, ParamsOfVerifySignature, ParamsOfSubscribeCollection, \
-    KeyPair, DeploySet, Signer, ParamsOfParse, SubscriptionResponseType
+    ParamsOfParse, ParamsOfSubscribeCollection, ParamsOfNaclSignOpen, \
+    KeyPair, DeploySet, Signer, SubscriptionResponseType, ParamsOfHash
 
 from torauth.Cache import Cache
 from torauth.Config import Config
 from torauth.gen_qr_code import gen_qr_code
-from torauth.utils import calc_address, hex_to_base64
+from torauth.utils import calc_address, hex_to_base64, base64_to_hex, string_to_base64
 
 log = logging.getLogger(__name__)
 
@@ -46,6 +46,7 @@ class Authenticator:
 
     async def start_authentication(
         self,
+        wallet_address: str,
         public_key: str,
         context: Any,
         retention_sec=3600
@@ -58,34 +59,43 @@ class Authenticator:
         :return: QR code encoded as base64 string
         '''
         rand = (
-            await self.cfg.client.crypto.generate_random_bytes(ParamsOfGenerateRandomBytes(length=24))
+            await self.cfg.client.crypto.generate_random_bytes(
+                ParamsOfGenerateRandomBytes(length=24)
+            )
         ).bytes
-        log.debug('Generated random:{}'.format(rand))
-        self.cache.add(public_key, retention_sec, rand, context)
+
+        self.cache.add(
+            wallet_address,
+            public_key,
+            retention_sec,
+            rand,  # Base64 encoded
+            context)
         return gen_qr_code(self.cfg.deep_link_url, rand)
 
     async def init(self, callback: Callable) -> None:
         '''
         Creates a subscription to the ROOT contract messages and start message processing
-        :param callback: async function with signature (context: Any, result: bool) 
+        :param callback: async function with signature (context: Any, result: bool)
         '''
         self.callback = callback
         root_address = await self.get_root_address()
 
         def save_message(response_data, response_type, *args):
             if response_type == SubscriptionResponseType.OK:
-                id = response_data['result']['id']
+                _id = response_data['result']['id']
+                wallet_address = response_data['result']['src']
                 boc = response_data['result']['boc']
-                self.messages[id] = boc
+                self.messages[_id] = (wallet_address, boc)
 
-        self.subscription = await self.cfg.client.net.subscribe_collection(
+        self._subscription = await self.cfg.client.net.subscribe_collection(
             params=ParamsOfSubscribeCollection(
                 collection='messages',
-                result='id boc',
+                result='src id boc',
                 filter={'dst': {'eq': root_address}}
             ),
             callback=save_message
         )
+        self.is_subscribed = True
 
         self._task = asyncio.create_task(self._handle_messages(1))
 
@@ -93,7 +103,8 @@ class Authenticator:
         '''
         Remove subscription and stop ROOT contract message processing
         '''
-        await self.cfg.client.net.unsubscribe(params=self.subscription)
+        self.is_subscribed = False
+        await self.cfg.client.net.unsubscribe(params=self._subscription)
         self._task.cancel()
 
     async def _handle_messages(self, period: int) -> None:
@@ -103,8 +114,10 @@ class Authenticator:
         and a callback with the result of comparision is called.
         :param period: time interval for checking the message queue
         '''
-        try:
-            while True:
+
+        while self.is_subscribed:
+            try:
+                print("Checking...")
 
                 obsolete_contexts = self.cache.clean_obsolete()
                 for context in obsolete_contexts:
@@ -113,33 +126,43 @@ class Authenticator:
 
                 if len(self.messages) > 0:
 
-                    _, boc = self.messages.popitem()
+                    _, (wallet_address, boc) = self.messages.popitem()
 
-                    params = ParamsOfDecodeMessageBody(
-                        abi=self.cfg.root_interface_abi,
-                        body=(
-                            await self.cfg.client.boc.parse_message(params=ParamsOfParse(boc))
-                        ).parsed['body'],
-                        is_internal=True,
-                    )
+                    body = (
+                        await self.cfg.client.boc.parse_message(params=ParamsOfParse(boc))
+                    ).parsed['body']
 
-                    value = (await self.cfg.client.abi.decode_message_body(params=params)).value
-                    public_key = value['public_key']
-                    signed_random = hex_to_base64(value['signed_random'])
+                    signed_otp = (
+                        await self.cfg.client.abi.decode_message_body(params=ParamsOfDecodeMessageBody(
+                            abi=self.cfg.root_interface_abi,
+                            body=body,
+                            is_internal=True,
+                        ))
+                    ).value['signedOTP']
 
-                    cached = self.cache.get(public_key)
+                    cached = self.cache.get(wallet_address)
 
                     if cached:
                         context = cached['context']
-                        rand = (await self.cfg.client.crypto.verify_signature(
-                            params=ParamsOfVerifySignature(
-                                signed=signed_random,
-                                public=public_key
-                            ))).unsigned
-                        if cached['rand'] == rand:
-                            log.debug(
-                                'Verified signed random:{}'.format(rand))
-                            self.cache.remove(public_key)
+
+                        hash_of_initial_random = (await self.cfg.client.crypto.sha256(params=ParamsOfHash(
+                            data=string_to_base64(cached['rand'])
+                        ))).hash
+
+                        signed = hex_to_base64(
+                            signed_otp + hash_of_initial_random
+                        )
+
+                        hash_of_received_random = (await self.cfg.client.crypto.nacl_sign_open(
+                            params=ParamsOfNaclSignOpen(
+                                signed=signed,
+                                public=cached['public_key']
+                            )
+                        )).unsigned
+
+                        if hash_of_initial_random == base64_to_hex(hash_of_received_random):
+                            log.debug('Check passed')
+                            self.cache.remove(wallet_address)
                             asyncio.create_task(self.callback(context, True))
 
                         else:
@@ -152,13 +175,13 @@ class Authenticator:
                 else:
                     await asyncio.sleep(period)
 
-        # We subscribed to all messages to the ROOT contract,
-        # not them all are related to authorization, and
-        # sometimes our validation code will fail
-        except (KeyError, AttributeError, ValueError, TonException):
-            pass
-        except asyncio.CancelledError:
-            log.debug('OK. Message handling is canceled')
-        except:
-            log.error('Unexpected error: {}'.format(sys.exc_info()[1]))
-            raise
+            # We subscribed to all messages to the ROOT contract,
+            # not them all are related to authorization, and
+            # sometimes our validation code will fail
+            except (KeyError, AttributeError, ValueError, TonException):
+                pass
+            except asyncio.CancelledError:
+                log.debug('OK. Message handling is canceled')
+            except:
+                log.error('Unexpected error: {}'.format(sys.exc_info()[1]))
+                raise

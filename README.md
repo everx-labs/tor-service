@@ -41,6 +41,8 @@ python -m unittest -v tests/UserAuthFail.py
 ## Example
 
 ```
+import asyncio
+from tests.mocks.Surf import Surf
 from torauth import Authenticator, Config, deploy_wallet
 
 config = Config()
@@ -53,30 +55,36 @@ async def on_auth_callback(context: Any, result: bool):
 # Initialize auth module by passing a callback function
 await auth.init( on_auth_callback )
 
-# if you need to change callback function, 
+# if you need to change callback function,
 # call auth.close(), before re-initialization
 
 async def authenticate_user(user_id):
 
     # get `wallet_address`, `public_key`, `secrect_key` from your store OR
     # create a new one. Remember to save return values
-    wallet_address, public_key, secrect_key = await deploy_wallet(config)
+    wallet_address, public_key, secret_key = await deploy_wallet(config)
 
     # Ask for QR code to start authentication procedure
     base64_qr_code = await auth.start_authentication(
-        public_key = public_key,     #
+        wallet_address = wallet_address,
+        public_key = public_key,
         retention_sec = 600,         # The period of time this QR code is valid
         context = {"user_id": ....}  # Any serializable context. It will be
                                      # used as a parameter of the callback
     )
 
-    # Show this code to the user so they can scan it
+    # Show this code to the user so they can scan it,
+    #
+    # or use Surf mock for automated testing:
+    surf = Surf(config, wallet_address, public_key, secret_key)
+    task = asyncio.create_task(surf.sign(base64_qr_code))
 
     # When the user completes the authentication procedure in Surf or
     # `retention_sec` period has passed, callback
     # `on_auth_callback(context, result)` will be executed
 ```
-See: `tests/UserAuthSuccess.py`
+
+You can find a real example here: `tests/UserAuthSuccess.py`
 
 ### TODO
 

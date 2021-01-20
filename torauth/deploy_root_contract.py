@@ -1,7 +1,8 @@
 import logging
-from torauth.utils import credit, calc_address, process_message
-from tonclient.types import Abi, KeyPair, DeploySet, CallSet, \
+from tonclient.types import DeploySet, CallSet, \
     Signer, ParamsOfParse, ParamsOfEncodeMessage, ParamsOfProcessMessage
+from torauth.utils import credit, calc_address, process_message
+
 log = logging.getLogger(__name__)
 
 

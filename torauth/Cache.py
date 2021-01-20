@@ -8,14 +8,16 @@ class Cache:
     def __init__(self):
         self.data = {}
 
-    def add(self, public_key: str, retention_sec: int, rand: str, context: Any) -> None:
+    def add(self, wallet_address, public_key: str, retention_sec: int, rand: str, context: Any) -> None:
         '''
         Saves data in a dictionary
+        : param wallet_address: user wallet address
         : param public_key: user public key
         : param context: serializable context
         : param retention_sec: time period to keep data
         '''
-        self.data[public_key] = {
+        self.data[wallet_address] = {
+            'public_key': public_key,
             'context': context,
             'rand': rand,
             'timestamp': time.time(),

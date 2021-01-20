@@ -7,30 +7,14 @@
     ],
     "functions": [
         {
-            "name": "constructor",
-            "inputs": [],
-            "outputs": [],
-            "id": "0xa"
-        },
-        {
-            "name": "sign",
+            "name": "proveOwnership",
             "inputs": [
                 {
-                    "name": "signed_random",
-                    "type": "bytes"
-                },
-                {
-                    "name": "signature",
-                    "type": "bytes"
-                },
-                {
-                    "name": "public_key",
+                    "name": "signedOTP",
                     "type": "bytes"
                 }
             ],
-            "outputs": [],
-            "id": "0xb"
+            "outputs": []
         }
-    ],
-    "events": []
+    ]
 }

@@ -40,7 +40,10 @@ class UserAuthFail(IsolatedAsyncioTestCase):
         # param context: Serializable object, that will be used as a callback parameter
         # param retention_sec: period of time while the QR code is valid
         base64_qr_code = await auth.start_authentication(
-            public_key, context=test_context, retention_sec=2)
+            wallet_address,
+            public_key,
+            context=test_context,
+            retention_sec=2)
 
         logging.info("Got base64 QR code: {}.....truncated".format(
             base64_qr_code[0:25]))
@@ -48,11 +51,12 @@ class UserAuthFail(IsolatedAsyncioTestCase):
         # Tune Surf instance
         surf = Surf(config, wallet_address, public_key, secret_key)
         # and send QR code to Surf. Encoded inside QR code `random string` will be signed
-        asyncio.create_task(surf.sign(base64_qr_code))
+        task = asyncio.create_task(surf.sign(base64_qr_code))
         logging.info(
             "Pretend that QR code was shown and user was redirected to the Surf")
 
         result = await auth_completed
+        task.cancel()
         logging.info("Authentication result is: {}".format(result['ok']))
         self.assertEqual(result['context'], test_context)
         self.assertEqual(result['ok'], False)
