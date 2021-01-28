@@ -27,7 +27,8 @@ class UserAuthSuccess(IsolatedAsyncioTestCase):
         (wallet_address, public_key, secret_key) = await deploy_wallet(config)
         logging.info("OK. wallet created")
 
-        auth_completed = asyncio.Future()
+        loop = asyncio.get_running_loop()
+        auth_completed = loop.create_future()
         test_context = {'user': 'Ron'}
 
         async def on_auth_callback(context, result):

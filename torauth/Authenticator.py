@@ -28,6 +28,10 @@ class Authenticator:
         self.cfg = config
         self.messages = {}
         self.cache = Cache()
+        self._callback = None
+        self._subscription = None
+        self._task = None
+        self._is_subscribed = False
 
     async def get_root_address(self) -> str:
         '''
@@ -77,7 +81,7 @@ class Authenticator:
         Creates a subscription to the ROOT contract messages and start message processing
         :param callback: async function with signature (context: Any, result: bool)
         '''
-        self.callback = callback
+        self._callback = callback
         root_address = await self.get_root_address()
 
         def save_message(response_data, response_type, *args):
@@ -95,17 +99,17 @@ class Authenticator:
             ),
             callback=save_message
         )
-        self.is_subscribed = True
-
         self._task = asyncio.create_task(self._handle_messages(1))
+        self._is_subscribed = True
 
     async def close(self) -> None:
         '''
         Remove subscription and stop ROOT contract message processing
         '''
-        self.is_subscribed = False
-        await self.cfg.client.net.unsubscribe(params=self._subscription)
-        self._task.cancel()
+        if self._subscription is not None:
+            await self.cfg.client.net.unsubscribe(params=self._subscription)
+        if self._task is not None:
+            self._task.cancel()
 
     async def _handle_messages(self, period: int) -> None:
         '''
@@ -115,14 +119,13 @@ class Authenticator:
         :param period: time interval for checking the message queue
         '''
 
-        while self.is_subscribed:
+        while self._is_subscribed:
             try:
-                print("Checking...")
-
+                log.debug("Checking...")
                 obsolete_contexts = self.cache.clean_obsolete()
                 for context in obsolete_contexts:
                     log.debug('Executing callback with obsolete context')
-                    asyncio.create_task(self.callback(context, False))
+                    asyncio.create_task(self._callback(context, False))
 
                 if len(self.messages) > 0:
 
@@ -163,11 +166,11 @@ class Authenticator:
                         if hash_of_initial_random == base64_to_hex(hash_of_received_random):
                             log.debug('Check passed')
                             self.cache.remove(wallet_address)
-                            asyncio.create_task(self.callback(context, True))
+                            asyncio.create_task(self._callback(context, True))
 
                         else:
                             log.debug('Randoms are NOT equal')
-                            asyncio.create_task(self.callback(context, False))
+                            asyncio.create_task(self._callback(context, False))
                     else:
                         pass  # do nothing
 
@@ -182,6 +185,7 @@ class Authenticator:
                 pass
             except asyncio.CancelledError:
                 log.debug('OK. Message handling is canceled')
+                self._is_subscribed = False
             except:
                 log.error('Unexpected error: {}'.format(sys.exc_info()[1]))
                 raise
