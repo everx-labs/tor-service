@@ -15,7 +15,7 @@ external_api = 'https://zxing.org/w/decode'
 log = logging.getLogger(__name__)
 debot_address = '0:a4543b20e0b169a7d3edb354d0aa45bc0ada23d357104ade368efde09099ec0e'
 
-tmpfiles = '../tmp/{}.keys'
+tmpfiles = './tmp/{}.keys'
 
 
 def async_wrap(func):

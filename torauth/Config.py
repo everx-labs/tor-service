@@ -32,7 +32,7 @@ class Config:
 
     def __init__(self, filename=None):
         if filename is None:
-            filename = os.path.join(os.path.dirname(__file__), '.env')
+            filename = os.path.join(os.path.dirname(__file__), 'env.default')
 
         self._from_file(filename)
 

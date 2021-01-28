@@ -3,8 +3,7 @@ import asyncio
 import logging
 from unittest import IsolatedAsyncioTestCase
 
-from . mocks.Surf import Surf
-from torauth import Authenticator, Config, deploy_wallet
+from torauth import Authenticator, Config, deploy_wallet, Surf
 
 logging.basicConfig(level=os.environ.get('LOGLEVEL', 'INFO'))
 

@@ -4,7 +4,7 @@ import os
 import logging
 from unittest import IsolatedAsyncioTestCase
 
-from . mocks.debot import debot
+from torauth.mocks.debot import debot
 
 logging.basicConfig(level=os.environ.get('LOGLEVEL', 'INFO'))
 
