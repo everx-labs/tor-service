@@ -12,6 +12,4 @@ config = Config()
 class DeployWallet(IsolatedAsyncioTestCase):
     async def test(self):
         address, public, secret = await deploy_wallet(config)
-        logging.debug('Wallet address: {}, public_key: {}, secret_key: {}'.format(
-            address, public, secret)
-        )
+        logging.debug(f'Wallet address: {address}, public_key: {public}, secret_key: {secret}')

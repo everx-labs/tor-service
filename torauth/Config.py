@@ -16,9 +16,9 @@ def onlydigits(string):
 def get_var(name):
     # All variables MUST be set
     value = os.getenv(name)
-    log.debug('{} = {}'.format(name, value))
+    log.debug(f'{name} = {value}')
     if value is None:
-        raise TypeError('Variable not set {}'.format(name))
+        raise TypeError(f'Variable not set {name}')
     return value
 
 
@@ -38,7 +38,7 @@ class Config:
 
     def _from_file(self, path):
         if os.path.isfile(path) == False:
-            log.debug('File "{}" not exists, but maybe that\'s OK'.format(path))
+            log.debug(f'File "{path}" not exists, but maybe that is OK')
 
         load_dotenv(path)
         self.root_abi = Abi.from_path(fullPath('ROOT_ABI'))

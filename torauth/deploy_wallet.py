@@ -22,7 +22,7 @@ async def deploy_wallet(cfg: Config) -> (str, str, str):
 
     await credit(cfg, address, cfg.multisig_initial_value)
 
-    log.info('Deploying contract to {}'.format(address))
+    log.info(f'Deploying contract to {address}')
 
     await process_message(
         client=cfg.client,

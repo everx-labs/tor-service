@@ -9,7 +9,7 @@ log = logging.getLogger(__name__)
 
 def credit(cfg, address, value):
 
-    log.debug('Sending {} to {}'.format(value, address))
+    log.debug(f'Sending {value} to {address}')
 
     return process_message(
         client=cfg.client,
