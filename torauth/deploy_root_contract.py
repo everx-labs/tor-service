@@ -1,16 +1,8 @@
-from torauth.utils import credit, calc_address, process_message
-import os
-import sys
 import logging
-
-from tonclient.types import Abi, KeyPair, DeploySet, CallSet, \
+from tonclient.types import DeploySet, CallSet, \
     Signer, ParamsOfParse, ParamsOfEncodeMessage, ParamsOfProcessMessage
+from torauth.utils import credit, calc_address, process_message
 
-sys.path.insert(0, os.path.abspath(
-    os.path.join(os.path.dirname(__file__), '..')))
-
-
-logging.basicConfig(level=os.environ.get('LOGLEVEL', 'INFO'))
 log = logging.getLogger(__name__)
 
 
